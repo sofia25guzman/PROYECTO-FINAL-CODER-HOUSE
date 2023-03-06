@@ -152,8 +152,8 @@ DETERMINISTIC
 		DECLARE result DECIMAL (11,2);
         SET result = precio * 0.21;
         RETURN result;
-	END
-$$
+	END $$ 
+
 
 -- 2. Formula para generar direcciones de email para comunicaciones internas con cada sucursal
 
@@ -161,14 +161,11 @@ DELIMITER $$
 
 DROP FUNCTION IF EXISTS mail_sucursal$$
 CREATE FUNCTION mail_sucursal ( id_sucursal VARCHAR(20), mail VARCHAR(20))
-RETURNS VARCHAR (20)
+RETURNS VARCHAR (100)
 DETERMINISTIC
-	BEGIN
-		DECLARE result VARCHAR (20);
-        SET result = (SELECT CONCAT(id_sucursal, '@supermecadocoder.com') FROM supermercado);
-		RETURN result;
-	END
-$$
+	RETURN CONCAT (id_sucursal, '@supermercadocoder.com')
+    $$
+
 
 -- PROCEDIMIENTOS ALMACENADOS
 
@@ -184,7 +181,8 @@ CREATE PROCEDURE queja_sucursal ()
         quejas.id_producto = supermercado.id_producto
         WHERE quejas.existe_queja = '1';
 	END  
-$$
+   $$
+DELIMITER ;  
 
 -- 2. identifica a los peridos con mayor fidelización de clientes, es decir en donde existió menor cantidad de dias entre la primera y la última compra
 
@@ -197,8 +195,8 @@ CREATE PROCEDURE fidelizacion ()
 		FROM periodo
         ORDER BY dias_transcurridos;
 	END
-	$$
-        
+	  $$ 
+   DELIMITER ;      
 
 -- CREACION DE TRIGGERS
 
@@ -223,14 +221,7 @@ VALUES (
     NEW.precio,
     NOW()
     );
-    
--- probamos el trigger insertando un nuevo valor en la tabla producto
 
-INSERT INTO producto
-VALUES
-	('0072-8800','5525',2500);
-    
-SELECT * FROM inspeccion_producto;
 
 -- 2.Crearemos un trigger que alimente una tabla de control para el administrador sobre la tabla cliente, para que verifique que usuario realiza 
 -- modificaciones, en que fecha y hora, y pueda observar que campo modificó el usuario con una vista completa de los campos antigüos y nuevos.
@@ -271,13 +262,6 @@ VALUES
      now()
      );
 
--- probamos el trigger actualizando un valores de la tabla clientes del id_cliente=965
-
-UPDATE cliente 
-SET nivel_educacion='doctorado', ingresos=960000
-WHERE id_cliente='965';
-
-SELECT * FROM control_administrador;
 
 -- 3. Trigger para crear una tabla de resplado de la base de clientes para futuros proyectos, en caso que un usuario elimine uno de los
 -- registros de la tabla clientes.
@@ -306,9 +290,56 @@ VALUES (
     now()
     );
 
--- probamos el trigger eliminando registros de la tabla cliente
 
-DELETE FROM cliente
-WHERE id_cliente='4141' OR id_cliente='4855';  
+-- CREACION DE USUARIOS Y ASIGNACION DE PERMISOS
+USE mysql;
+SHOW tables;
+select * from user;
 
-SELECT * FROM backup_clientes;
+DROP USER if exists 'host1';
+CREATE USER 'host1' identified by 'host1-123'; -- el usuario host1 tendrá permisos de solo lectura 
+
+DROP USER if exists 'host2';
+CREATE USER 'host2' identified by 'host2-123'; -- el usuario host2 tendrá permisos de lectura, inserción y modificación
+
+-- asignamos permisos de sólo lectura sobre el host1
+GRANT SELECT ON *.* to 'host1';
+
+-- asignamos permisos de lectura, inserción y modificación sobre le host2
+GRANT SELECT, INSERT, UPDATE ON  *.* to 'host2';
+
+-- SUBLENGUAJE TCL
+
+select @@autocommit;
+set @@autocommit=0;
+
+-- 1. eliminación de registros
+START TRANSACTION;
+DELETE from supermercado
+WHERE id_sucursal= 'A001' OR id_sucursal= 'A002' OR id_sucursal= 'A003';
+ROLLBACK;
+-- COMMIT; se deja comentada para no afectar la tabla original
+
+-- 2. Inserción de registros
+START TRANSACTION;
+INSERT INTO quejas
+VALUES 
+	(null,'1','0025-8596','7852'),
+	(null,'1','0006-4589','8577'),
+	(null,'1','0001-3551','6300'),
+	(null,'0','0052-7812','6157');
+SAVEPOINT lote1;
+INSERT INTO quejas
+VALUES 
+	(null,'0','0023-0236','0015'),
+	(null,'1','0145-8120','7823'),
+	(null,'0','0039-4522','0023'),
+	(null,'1','0039-8596','0023');
+SAVEPOINT lote2;
+RELEASE SAVEPOINT lote1;
+-- COMMIT; se deja comentada porque no se quiere modificar la tabla principal
+
+-- BACKUP DE LA BASE DE DATOS
+-- se incluye en el backup las tablas campaña, cliente,  periodo y quejas. El 
+-- backup incluye solo datos.
+
